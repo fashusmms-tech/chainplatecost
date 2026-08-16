@@ -1,0 +1,48 @@
+name: Build APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java (JDK 17)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            autoconf automake libtool pkg-config zlib1g-dev libffi-dev \
+            libssl-dev libltdl-dev
+
+      - name: Install buildozer
+        run: |
+          pip install --user buildozer
+          export PATH="$HOME/.local/bin:$PATH"
+
+      - name: Build APK (debug)
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          yes | buildozer android debug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: chainplatecost-apk
+          path: bin/*.apk
+          if-no-files-found: error
