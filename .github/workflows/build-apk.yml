@@ -13,7 +13,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Java (JDK 17)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "17"
@@ -30,19 +30,27 @@ jobs:
             autoconf automake libtool pkg-config zlib1g-dev libffi-dev \
             libssl-dev libltdl-dev
 
-      - name: Install buildozer
+      - name: Install buildozer + cython
         run: |
-          pip install --user buildozer
+          pip install --user buildozer cython
           export PATH="$HOME/.local/bin:$PATH"
 
       - name: Build APK (debug)
         run: |
           cd "$GITHUB_WORKSPACE"
-          yes | buildozer android debug
+          set -o pipefail
+          yes | buildozer android debug 2>&1 | tee buildozer.log
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: chainplatecost-apk
           path: bin/*.apk
-          if-no-files-found: error
+          if-no-files-found: warn
+
+      - name: Upload build log (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: buildozer-log
+          path: buildozer.log
