@@ -30,7 +30,15 @@ jobs:
             autoconf automake libtool pkg-config zlib1g-dev libffi-dev \
             libssl-dev libltdl-dev
 
-      - name: Install buildozer (pinned 1.5.0)
+      - name: Cache buildozer (SDK/NDK/编译缓存, 下次构建会快很多)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.buildozer
+            .buildozer
+          key: buildozer-cache-${{ hashFiles('buildozer.spec') }}
+
+      - name: Install buildozer (pinned 1.5.0) + cython (pinned 0.29)
         run: |
           pip install --user buildozer==1.5.0 cython==0.29.37
           export PATH="$HOME/.local/bin:$PATH"
@@ -38,10 +46,11 @@ jobs:
       - name: Build APK (debug)
         run: |
           cd "$GITHUB_WORKSPACE"
-          set -o pipefail
           yes | buildozer android debug 2>&1 | tee buildozer.log
+          exit ${PIPESTATUS[1]}
 
       - name: Upload APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: chainplatecost-apk
