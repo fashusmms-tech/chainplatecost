@@ -32,7 +32,7 @@ jobs:
 
       - name: Install buildozer (pinned 1.5.0)
         run: |
-          pip install --user buildozer==1.5.0
+          pip install --user buildozer==1.5.0 cython
           export PATH="$HOME/.local/bin:$PATH"
 
       - name: Build APK (debug)
