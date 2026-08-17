@@ -30,9 +30,9 @@ jobs:
             autoconf automake libtool pkg-config zlib1g-dev libffi-dev \
             libssl-dev libltdl-dev
 
-      - name: Install buildozer + cython
+      - name: Install buildozer (pinned 1.5.0)
         run: |
-          pip install --user buildozer cython
+          pip install --user buildozer==1.5.0
           export PATH="$HOME/.local/bin:$PATH"
 
       - name: Build APK (debug)
