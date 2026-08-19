@@ -31,6 +31,9 @@ from chainplate_calc import (MATERIAL_KEYS, MATERIAL_NAMES, PITCHES,
                              compute, default_settings, eval_expr, format_result,
                              formula_vars, load_settings, save_settings)
 
+# 材质显示名 → 内部键名 (Spinner 显示中文名, 计算/设置索引用内部键)
+MATERIAL_KEY = {name: key for key, name in MATERIAL_NAMES.items()}
+
 # ---------------- 中文字体 ----------------
 # 兼容不同上传方式: fonts/ 子目录 或 项目根目录, 找到哪个用哪个
 _DIR = os.path.dirname(os.path.abspath(__file__))
@@ -111,13 +114,13 @@ class MainScreen(Screen):
 
         # 材质
         g.add_widget(section("材质与节距"))
-        self.sp_plate = Spinner(text="201", values=list(MATERIAL_NAMES.values()),
+        self.sp_plate = Spinner(text="201不锈钢", values=list(MATERIAL_NAMES.values()),
                                 size_hint_y=None, height=dp(44), font_size=sp(15))
         self.sp_plate.bind(text=lambda *a: self.refresh_info())
         g.add_widget(hrow(fld_label("板材质"), self.sp_plate))
 
         self.cb_chain_u = CheckBox(active=True)
-        self.sp_chain = Spinner(text="201", values=list(MATERIAL_NAMES.values()),
+        self.sp_chain = Spinner(text="201不锈钢", values=list(MATERIAL_NAMES.values()),
                                 size_hint_y=None, height=dp(44), font_size=sp(15),
                                 disabled=True)
         g.add_widget(hrow(fld_label("链条材质"), self.cb_chain_u,
@@ -126,7 +129,7 @@ class MainScreen(Screen):
         self.cb_chain_u.bind(active=self.on_chain_unified)
 
         self.cb_pin_u = CheckBox(active=True)
-        self.sp_pin = Spinner(text="201", values=list(MATERIAL_NAMES.values()),
+        self.sp_pin = Spinner(text="201不锈钢", values=list(MATERIAL_NAMES.values()),
                               size_hint_y=None, height=dp(44), font_size=sp(15),
                               disabled=True)
         g.add_widget(hrow(fld_label("穿杆材质"), self.cb_pin_u,
@@ -238,7 +241,7 @@ class MainScreen(Screen):
             self.sp_chain.text = self.sp_plate.text
         if self.cb_pin_u.active:
             self.sp_pin.text = self.sp_plate.text
-        mat = self.sp_plate.text
+        mat = MATERIAL_KEY.get(self.sp_plate.text, self.sp_plate.text)
         self.lbl_sheet.text = f"当前板材价格: {s['sheet_price'][mat]:g} 元/kg"
         p = self.pitch()
         self.lbl_chain_w.text = (f"节距 {p} 链条宽度: "
@@ -257,9 +260,9 @@ class MainScreen(Screen):
     def on_compute(self):
         s = self.app.settings
         params = {"pitch": self.pitch(),
-                  "plate_mat": self.sp_plate.text,
-                  "chain_mat": self.sp_chain.text,
-                  "pin_mat": self.sp_pin.text}
+                  "plate_mat": MATERIAL_KEY.get(self.sp_plate.text, self.sp_plate.text),
+                  "chain_mat": MATERIAL_KEY.get(self.sp_chain.text, self.sp_chain.text),
+                  "pin_mat": MATERIAL_KEY.get(self.sp_pin.text, self.sp_pin.text)}
         errs = []
         try:
             params["width"] = self._f("有效宽度", self.in_width)
@@ -315,6 +318,9 @@ class MainScreen(Screen):
             r = compute(params, s)
         except ValueError as e:
             popup_msg(f"计算错误(公式可能有误, 请到设置→公式检查):\n{e}")
+            return
+        except Exception as e:
+            popup_msg(f"计算出错: {type(e).__name__}: {e}")
             return
         self.result.text = format_result(r)
 
@@ -510,7 +516,7 @@ class SettingsScreen(Screen):
         except ValueError:
             w, t, d = 500.0, 2.0, 8.0
         pitch = PITCH_VALUE[m.pitch()]
-        mat = m.sp_plate.text
+        mat = MATERIAL_KEY.get(m.sp_plate.text, m.sp_plate.text)
         return {
             "width": w, "thickness": t, "pin_d": d, "pitch": pitch,
             "chain_width": chain_width_of(m.pitch(), s),
@@ -544,8 +550,10 @@ class SettingsScreen(Screen):
         elif slot == "total":
             m = self.app.main_screen
             try:
-                params = {"pitch": m.pitch(), "plate_mat": m.sp_plate.text,
-                          "chain_mat": m.sp_chain.text, "pin_mat": m.sp_pin.text,
+                params = {"pitch": m.pitch(),
+                          "plate_mat": MATERIAL_KEY.get(m.sp_plate.text, m.sp_plate.text),
+                          "chain_mat": MATERIAL_KEY.get(m.sp_chain.text, m.sp_chain.text),
+                          "pin_mat": MATERIAL_KEY.get(m.sp_pin.text, m.sp_pin.text),
                           "width": float(m.in_width.text),
                           "thickness": float(m.in_thick.text),
                           "pin_d": float(m.in_pin_d.text),
