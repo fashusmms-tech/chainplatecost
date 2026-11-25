@@ -1,84 +1,97 @@
 # 链板成本计算器 — 手机版 (Android APK)
 
-电脑版(Windows exe)的手机版。计算逻辑与电脑版完全一致，界面用 Kivy 重写，
-适合手机触屏操作。**APK 由 GitHub Actions 云端自动编译**，无需在本机安装
-任何安卓工具链。
+电脑版(Windows exe)的手机版，界面用 Kivy 重写，计算口径与电脑版完全一致。
+**APK 由 GitHub Actions 云端自动编译**，本机不需要安装安卓工具链。
+
+当前版本：**v1.1.0**
 
 ## 文件说明
 
 | 文件 | 说明 |
 |---|---|
 | `main.py` | Kivy 手机界面（计算 + 选配件 + 设置 + 公式编辑 + 变量对照） |
-| `chainplate_calc.py` | 计算引擎（纯 Python，与电脑版同一份） |
-| `fonts/simhei.ttf` | 内置中文字体（安卓默认字体不支持中文） |
-| `buildozer.spec` | 打包配置（应用名、包名、版本、安卓版本等） |
+| `chainplate_calc.py` | 计算引擎（纯 Python，与电脑版同一份；**v1.1 未改动**） |
+| `fonts/simhei.ttf` | 内置中文字体（已做**子集化**：只保留 App 用到的字，9.3 MB → 120 KB） |
+| `icon.png` / `presplash.png` | 应用图标 / 启动画面（v1.1 新增，替代原 SDL、Kivy 默认图） |
+| `buildozer.spec` | 打包配置（应用名、包名、版本、图标、安卓版本等） |
+| `tests/golden.py` | 计算口径回归测试（118 组用例，锁死每个价格数字） |
+| `tests/ui_smoke.py` | 界面层回归测试（21 项：取值、选配件、冲孔、记忆、布局） |
 | `.github/workflows/build-apk.yml` | GitHub 云端自动构建脚本 |
 
-## 第一次构建步骤（约 10 分钟操作）
+## v1.1 改了什么
+
+**只改界面与交互，计算口径与公式一行未动**（有 `tests/golden.py` 兜底）。
+
+| 改动 | 说明 |
+|---|---|
+| 小数点可输入 | 数字框从 `input_type="number"` 改为文本 + 浮点过滤。原来安卓数字键盘常常没有小数点键，1.5 / 2.5 这类板厚输不进去 |
+| 主界面不再有大片空白 | 未勾选的选配件参数区原本每个仍占 100px（5 个共 500px），现在高度归零 |
+| 结果改成明细表 | 每米总价大字 + 「项目 / 单件单价 / 每米」三列表格 + 材料拆分明细 |
+| 算完自动滚到结果 | 并新增【复制明细】按钮，可直接粘贴到微信 |
+| 公式页可读 | 原来固定 120dp 高度导致绿色变量文字盖住输入框；现在每块自适应高度，公式框自动换行显示全文，变量对照改成一变量一行 |
+| 冲孔自动/手动有提示 | 板厚够薄时提示"自动计算，价格可留空"，否则提示"需手动填写" |
+| 记住上次输入 | 材质/节距/尺寸/选配件存到 `ui_state.json`，下次打开自动恢复 |
+| 设置页 8 个页签放得下 | 页签名缩短为两字，不再被右侧裁掉 |
+| 删掉 3 个假设置 | 「中板档最小厚度」「厚板档最小厚度」「冲孔手动最小板厚」原来改了不生效，已从界面移除（引擎里的键仍保留，不影响老配置） |
+| 返回键 | 设置页按返回键回主界面（原来会直接把 App 退到后台） |
+| 切后台不丢数据 | `on_pause()` 会保存当前输入 |
+| 图标 / 启动图 | 换成"链板 + ￥"图标和深蓝启动页 |
+| 体积 | 字体子集化，APK 预计从 23.0 MB 降到 **约 18.4 MB** |
+
+## 改代码后怎么出包
+
+1. 本地自检（强烈建议，10 秒）：
+   ```bash
+   python tests/golden.py check     # 计算口径是否与基线一致（必须 PASS）
+   python tests/ui_smoke.py         # 界面取值/交互是否正常（需图形环境）
+   ```
+2. 提交并推送：
+   ```bash
+   git add .
+   git commit -m "说明这次改了什么"
+   git push
+   ```
+3. GitHub 仓库 → Actions → 等 "Build APK" 跑完（改代码后约 5~15 分钟）→
+   Artifacts 下载 `chainplatecost-apk` → 解压得到
+   `chainplatecost-1.1.0-arm64-v8a-debug.apk`。
+4. 传到手机直接覆盖安装（设置和上次输入都会保留）。
+
+> 想改价格/工费：不用改代码，装好 App 后在【设置】里改，存在手机里。
+> 想改公式：设置→公式页，改完点保存会自动试算校验。
+
+## 首次构建（新仓库）
 
 1. **注册/登录 GitHub**（https://github.com），没有账号先注册（免费）。
-
 2. **新建仓库**：右上角 + → New repository
-   - Repository name: `chainplatecost`
-   - 公开或私有都行（私有推荐）
-   - 不要勾选任何初始化选项（README 等都不要）
-   - 点 Create repository
-
-3. **上传代码**（任选一种）：
-   - 方式 A（网页上传，简单）：
-     打开仓库页面 → Add file → Upload files → 把本文件夹里的
-     `main.py`、`chainplate_calc.py`、`buildozer.spec`、`fonts` 文件夹、
-     `.github` 文件夹全部拖进去 → Commit changes
-     （注意 .github 是隐藏文件夹，网页上传时直接拖整个文件夹即可）
-   - 方式 B（git 命令）：
-     ```
-     cd E:\deepseek\chainplate_android
-     git init
-     git add .
-     git commit -m "链板成本计算器 手机版"
-     git branch -M main
-     git remote add origin https://github.com/你的用户名/chainplatecost.git
-     git push -u origin main
-     ```
-     （推送时会要求输入 GitHub 用户名和 Token；Token 在 GitHub →
-      Settings → Developer settings → Personal access tokens 生成，
-      repo 权限即可）
-
-4. **等待云端构建**：
-   仓库页面 → Actions 页签 → 会自动开始 "Build APK" 工作流，
-   首次构建约 **20~40 分钟**（要下载安卓 SDK），之后每次改代码
-   重新 push 会自动构建（约 5~15 分钟）。
-
-5. **下载 APK**：构建完成后（绿色 ✓）→ 点击该次运行 → 底部
-   Artifacts → 下载 `chainplatecost-apk` → 解压得到
-   `chainplatecost-1.0.0-arm64-v8a-debug.apk`。
-
-6. **安装到手机**：
-   - 把 apk 传到手机（微信文件传输助手 / QQ / 数据线都行）
-   - 手机点开 apk → 允许"安装未知应用"（首次会提示）
-   - 安装完成即可使用；图标名为"链板成本计算器"
+   - Repository name: `chainplatecost`（公开/私有都行，私有推荐）
+   - 不要勾选任何初始化选项
+3. **上传代码**：把 `main.py`、`chainplate_calc.py`、`buildozer.spec`、
+   `icon.png`、`presplash.png`、`fonts/`、`.github/`、`tests/` 全部上传
+   （`.github` 是隐藏文件夹，网页上传直接拖整个文件夹即可）。
+4. **等待构建**：Actions 页签会自动开始 "Build APK"，首次约 20~40 分钟
+   （要下载安卓 SDK），之后每次 push 约 5~15 分钟。
+5. **下载安装**：绿色 ✓ → 该次运行 → Artifacts → `chainplatecost-apk`。
 
 ## 使用说明（手机版）
 
-- **计算**：选材质/节距 → 输入尺寸 → 勾选选配件后参数框自动出现 →
-  点【计算】→ 下方显示逐项明细和每米总价
-- **设置**：主界面点【设置】→ 8 个页签（板材价格/链条价格/链条宽度/
-  公式常数/切割冲床焊接/冲孔/选配件/公式）→ 改完点【保存设置】
-- **公式**：公式页签可直接修改计算公式，每条公式下方有变量对照
-  （变量=中文名=当前值）；改完可点保存，写错会提示
-- 设置保存在手机 App 私有目录（卸载 App 会清空，重装后恢复默认）
+- **计算**：选材质/节距 → 输入尺寸 → 勾选选配件后参数框自动展开 →
+  点【计算】→ 页面底部显示每米总价和明细表 → 可点【复制明细】发微信。
+- **设置**：主界面点【设置】→ 8 个页签（板材/链条/链宽/常数/加工/冲孔/配件/公式）。
+- **公式**：公式页每条下方实时显示变量对照（变量=中文名=当前值），
+  改完点【保存设置】会自动用示例数据试算，写错会提示。
+- 数据位置：设置存 `settings.json`、上次输入存 `ui_state.json`，
+  都在 App 私有目录，**卸载 App 会清空**。
+
+## 已知限制
+
+- 只有 arm64-v8a（2019 年前的 32 位安卓机装不上）。
+- debug 签名，只能自己侧载，不能上应用商店。
+- APK 里的价格表和公式是明文，发给外部人员等于公开报价底数。
+- 横挡板数量算法仍按原口径（间隔÷节距四舍五入），v1.1 **未改动**；
+  如需按物理间隔（1000÷间隔）计算，要先确认业务口径再改。
 
 ## 常见问题
 
-- **构建失败**：点开失败的运行看日志；最常见原因是网络超时，
-  重新运行一次（Actions → 该次运行 → 右上角 Re-run）通常就好。
-- **想改应用图标/名称**：改 `buildozer.spec` 里的 title；
-  图标需要加 `icon.png`（512×512）到项目根目录并在 spec 中配置。
-- **包名冲突**：`package.domain` 改自己的域名倒序更稳妥。
-- **旧手机（Android 5 以下）**：把 `buildozer.spec` 里
-  `android.minapi` 调低（如 19）后重新构建。
-
-## 本地修改代码后
-
-改完 `main.py` 或 `chainplate_calc.py` → `git add . && git commit -m x && git push`
-→ 等 Actions 构建 → 下载新 APK 安装（可直接覆盖安装，设置会保留）。
+- **构建失败**：看失败运行的日志，最常见是网络超时，Re-run 一次通常就好。
+- **想改应用名**：改 `buildozer.spec` 的 `title`。
+- **想重新生成图标**：`icon.png` 为 512×512，`presplash.png` 为 1080×1920，直接替换同名文件即可。
