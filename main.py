@@ -36,7 +36,7 @@ from chainplate_calc import (MATERIAL_NAMES, PITCHES, SAMPLE_ENV, VAR_NAMES,
                              eval_expr, format_result, formula_vars,
                              load_settings, save_settings)
 
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 
 MATERIAL_KEY = {name: key for key, name in MATERIAL_NAMES.items()}
 MATERIAL_LIST = list(MATERIAL_NAMES.values())
@@ -276,8 +276,15 @@ class IconBtn(Button):
         center_in(g, self)
 
 
-class Switch(Widget):
-    """圆角开关 (代替原来那个灰色小方块勾选框)。"""
+class MiniSwitch(Widget):
+    """圆角开关 (代替原来那个灰色小方块勾选框)。
+
+    注意: 名字不能叫 Switch —— Kivy 内置 kivy.uix.switch.Switch 在 data/style.kv 里
+    用 <Switch> 注册了样式规则，而 Kivy 是按**类名**匹配 kv 规则的。叫 Switch 会让
+    那条规则套到本控件上，规则里的 self.active_norm_pos 在本类上是 None，
+    求值 None * float 抛 TypeError，App 启动即崩（手机上表现为打开闪退）。
+    回归检查: python tests/check_class_names.py
+    """
     active = BooleanProperty(False)
 
     def __init__(self, active=False, w=38, h=22, **kw):
@@ -663,7 +670,7 @@ class MainScreen(Screen):
         # 链条材质
         r2 = Row(46)
         r2.add_widget(L("链条材质", 13.5, (0.79, 0.83, 0.87, 1)))
-        self.cb_chain_u = Switch(True)
+        self.cb_chain_u = MiniSwitch(True)
         self.cb_chain_u.bind(active=self.on_chain_unified)
         r2.add_widget(vpad(self.cb_chain_u, 46))
         r2.add_widget(vpad(L("同板", 11, DIM), 46))
@@ -674,7 +681,7 @@ class MainScreen(Screen):
         # 穿杆材质
         r3 = Row(46)
         r3.add_widget(L("穿杆材质", 13.5, (0.79, 0.83, 0.87, 1)))
-        self.cb_pin_u = Switch(True)
+        self.cb_pin_u = MiniSwitch(True)
         self.cb_pin_u.bind(active=self.on_pin_unified)
         r3.add_widget(vpad(self.cb_pin_u, 46))
         r3.add_widget(vpad(L("同板", 11, DIM), 46))
@@ -791,7 +798,7 @@ class MainScreen(Screen):
                 tg = fit(L(tag, 10, (0.60, 0.64, 0.70, 1)), 14)
                 row.add_widget(vpad(tg, 46))
 
-            sw = Switch(False)
+            sw = MiniSwitch(False)
             row.add_widget(vpad(sw, 46))
             c3.add_widget(row)
 
@@ -1660,7 +1667,7 @@ class SettingsScreen(Screen):
         for tab, label, path in S_BOOL:
             if tab not in tabs:
                 tabs[tab] = self._make_tab(tp, tab)
-            sw = Switch(bool(get_nested(self.app.settings, path)))
+            sw = MiniSwitch(bool(get_nested(self.app.settings, path)))
             self.bools[path] = sw
             row = Row(44, divider=True)
             row.add_widget(L(label, 12.5, (0.72, 0.76, 0.80, 1)))

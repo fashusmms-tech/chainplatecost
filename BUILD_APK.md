@@ -117,15 +117,31 @@ keytool -genkey -v -keystore chainplate.keystore -alias chainplate \
 # 1) 公式没被动过（118 组用例）
 python tests/golden.py
 
-# 2) 界面逻辑没坏（21 项，需要 Kivy；没有 Kivy 时用替身跑）
+# 2) 类名不能和 Kivy 内置控件重名（重名会导致手机上打开即闪退）
+python tests/check_class_names.py
+
+# 3) 界面逻辑没坏（21 项，需要 Kivy；没有 Kivy 时用替身跑）
 PYTHONPATH=tests/kvshim python tests/ui_smoke.py
 
-# 3) 文案没有用到子集字体外的字（否则手机上变方框）
+# 4) 文案没有用到子集字体外的字（否则手机上变方框）
 PYTHONPATH=tests/kvshim python tests/kvshim/fontcheck.py
 
-# 4) 出预览图（不需要 Kivy）
+# 5) 出预览图（不需要 Kivy）
 PYTHONPATH=tests/kvshim python tests/kvshim/shots.py
 ```
 
 `tests/kvshim/` 是本机用的「Kivy 替身 + 渲染器」，**不会打进 APK**
 （`buildozer.spec` 里 `source.exclude_dirs` 已经排除 `tests`）。
+
+> ⚠️ 替身没有 Kivy 的 kv 规则，所以「类名撞车」这类问题它测不出来 —— 这就是
+> 第 2 项单独存在的理由。曾经把开关类命名为 `Switch`，被 Kivy 的 `<Switch>`
+> 规则套上，构造时引用不存在的 `active_norm_pos`，启动就崩。
+>
+> 想在本机用**真 Kivy** 跑一遍（最能提前发现这类问题）：
+>
+> ```bash
+> python -m venv .venv-kivy
+> .venv-kivy\Scripts\python -m pip install -i https://pypi.tuna.tsinghua.edu.cn/simple kivy==2.3.0
+> set CHAINPLATE_DATA_DIR=%CD%\.appdata_test
+> .venv-kivy\Scripts\python -c "import main; main.ChainPlateApp().run()"
+> ```
