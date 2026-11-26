@@ -3,17 +3,28 @@ name: Build APK
 on:
   push:
     branches: [ main, master ]
+    paths-ignore:
+      - "**.md"
+      - "preview/**"
+      - "tests/**"
   workflow_dispatch:
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # p4a 2024.01.21 + NDK 25b 在 22.04 上最稳; ubuntu-latest(24.04) 没有 libtinfo5 会直接挂
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Java (JDK 17)
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
@@ -27,39 +38,61 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            autoconf automake libtool pkg-config zlib1g-dev libffi-dev \
-            libssl-dev libltdl-dev
+            autoconf automake libtool pkg-config cmake \
+            zlib1g-dev libffi-dev libssl-dev libltdl-dev \
+            libncurses-dev libtinfo-dev libgmp-dev libmpc-dev \
+            unzip zip ccache
+          # 22.04 上有 libtinfo5 就装, 没有也不让整步失败
+          sudo apt-get install -y libtinfo5 || echo "libtinfo5 不需要/不可用, 跳过"
 
-      - name: Cache buildozer (SDK/NDK/编译缓存, 下次构建会快很多)
+      - name: Install buildozer + cython (pinned)
+        run: |
+          pip install --user "buildozer==1.5.0" "cython==0.29.37"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/buildozer" --version
+          python -c "import Cython; print('cython', Cython.__version__)"
+
+      - name: Cache SDK/NDK and build dir
         uses: actions/cache@v4
         with:
           path: |
             ~/.buildozer
             .buildozer
-          key: buildozer-cache-${{ hashFiles('buildozer.spec') }}
+          key: buildozer-${{ runner.os }}-${{ hashFiles('buildozer.spec') }}
+          restore-keys: |
+            buildozer-${{ runner.os }}-
 
-      - name: Install buildozer (pinned 1.5.0) + cython (pinned 0.29)
+      - name: Show spec / version
         run: |
-          pip install --user buildozer==1.5.0 cython==0.29.37
-          export PATH="$HOME/.local/bin:$PATH"
+          grep -E "^(version|package.name|requirements|p4a.branch|android.ndk|android.api)" buildozer.spec || true
+          grep -m1 "APP_VERSION" main.py || true
 
       - name: Build APK (debug)
+        # debug 包自带调试签名, 可以直接装机; release 需要自己的 keystore, 见 BUILD_APK.md 第 5 节
         run: |
-          cd "$GITHUB_WORKSPACE"
-          yes | buildozer android debug 2>&1 | tee buildozer.log
-          exit ${PIPESTATUS[1]}
+          set +e
+          # 不能加 set -o pipefail: buildozer 读完输入后 yes 会收到 SIGPIPE(141), 会被误判成失败
+          yes | buildozer -v android debug 2>&1 | tee buildozer.log
+          status=${PIPESTATUS[1]}
+          echo "buildozer exit=$status"
+          echo "--- 产物 ---"
+          ls -lh bin/ || true
+          exit "$status"
 
       - name: Upload APK
-        if: always()
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: chainplatecost-apk
           path: bin/*.apk
-          if-no-files-found: warn
+          if-no-files-found: error
+          retention-days: 30
 
-      - name: Upload build log (on failure)
-        if: failure()
+      - name: Upload build log
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: buildozer-log
           path: buildozer.log
+          if-no-files-found: warn
+          retention-days: 7

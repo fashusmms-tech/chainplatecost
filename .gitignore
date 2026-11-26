@@ -1,6 +1,25 @@
 # Python 缓存
 __pycache__/
 *.pyc
+*.pyo
 
 # 本地运行时数据
 settings.json
+ui_state.json
+
+# 打包产物 / 中间文件
+bin/
+.buildozer/
+buildozer.log
+.venv/
+venv/
+
+# 本机预览(不属于 app)
+preview/
+tests/kvshim/out/
+tests/kvshim/kivyenv/
+
+# 编辑器
+.idea/
+.vscode/
+.DS_Store
