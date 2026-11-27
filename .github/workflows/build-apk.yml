@@ -29,6 +29,28 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # 固定调试签名: 否则每次构建都会新生成一把 key, 签名一变手机就必须先卸载再装,
+      # 本地保存的设置也会丢。这里用固定 cache key 复用同一把 key; 缓存没命中时
+      # 按同样的 alias/口令重建(AGP 认这套标准参数)。
+      - name: Cache Android debug keystore
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: android-debug-keystore-v1
+
+      - name: 确保调试签名存在
+        run: |
+          mkdir -p ~/.android
+          if [ ! -f ~/.android/debug.keystore ]; then
+            keytool -genkeypair -v -keystore ~/.android/debug.keystore \
+              -storepass android -keypass android -alias androiddebugkey \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          ls -l ~/.android/debug.keystore
+          # 注意: 不要接 `| head`, keytool 会收到 SIGPIPE 让整步失败
+          keytool -list -keystore ~/.android/debug.keystore -storepass android
+
       - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
