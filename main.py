@@ -10,6 +10,8 @@ v1.2 只重做界面层：深色工业风、分区卡片、分段胶囊、开关
 """
 import json
 import os
+import time
+import weakref
 
 from kivy.app import App
 from kivy.clock import Clock
@@ -30,13 +32,17 @@ from kivy.uix.spinner import Spinner, SpinnerOption
 from kivy.uix.textinput import TextInput
 from kivy.uix.togglebutton import ToggleButton
 from kivy.uix.widget import Widget
+try:
+    from kivy.utils import platform
+except Exception:  # kvshim 等替身环境里没有 kivy.utils
+    platform = ""
 
 from chainplate_calc import (MATERIAL_NAMES, PITCHES, SAMPLE_ENV, VAR_NAMES,
                              chain_width_of, compute, default_settings,
                              eval_expr, format_result, formula_vars,
                              load_settings, save_settings)
 
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.3.0"
 
 MATERIAL_KEY = {name: key for key, name in MATERIAL_NAMES.items()}
 MATERIAL_LIST = list(MATERIAL_NAMES.values())
@@ -50,7 +56,58 @@ try:
     LabelBase.register(name="Roboto", fn_regular=_FONT)
 except Exception:
     pass
-Window.softinput_mode = "pan"
+# below_target: 键盘弹出时把焦点控件顶到键盘上方(手机上比 pan 稳)
+Window.softinput_mode = "below_target"
+
+
+# ---------------- 软键盘 / 焦点 ----------------
+# Android 的 IME 是异步弹出的。Kivy 2.3 在 request_keyboard 之后, 每 0.2s 用
+# SDL 的"键盘是否已显示"复查一次, 没显示就 release —— 而 release 会顺带清掉焦点。
+# IME 弹出动画还没走完时就会被误判, 表现就是"点输入框完全没反应"。
+# 这里给每次键盘请求留一个宽限期, 宽限期内不做这个复查。
+def _patch_ime_grace(seconds=2.0):
+    if platform != "android":
+        return
+    try:
+        orig_check = Window._check_keyboard_shown
+        orig_request = Window.request_keyboard
+    except AttributeError:
+        return
+    state = {"until": 0.0}
+
+    def _check(dt):
+        if time.time() < state["until"]:
+            return True
+        return orig_check(dt)
+
+    def _request(*a, **kw):
+        state["until"] = time.time() + seconds
+        return orig_request(*a, **kw)
+
+    Window._check_keyboard_shown = _check
+    Window.request_keyboard = _request
+
+
+_patch_ime_grace()
+
+# 同一时刻只允许一个输入框持有焦点: 否则会同时亮多个橙色描边, 键盘也不知道给谁。
+_INPUTS = []
+
+
+def _register_input(w):
+    _INPUTS.append(weakref.ref(w))
+
+
+def _defocus_others(keep):
+    for ref in list(_INPUTS):
+        w = ref()
+        if w is None:
+            try:
+                _INPUTS.remove(ref)
+            except ValueError:
+                pass
+        elif w is not keep and w.focus:
+            w.focus = False
 
 # ============================================================
 # 主题 (深色工业风: 炭黑底 + 琥珀强调)
@@ -353,6 +410,7 @@ class Input(TextInput):
                             width=dp(0.9))
         self.bind(pos=self._sync, size=self._sync, focus=self._on_focus)
         self._sync()
+        _register_input(self)
 
     def _sync(self, *a):
         self._bg.pos = self.pos
@@ -365,6 +423,9 @@ class Input(TextInput):
             self._lc.rgba = LINE2
 
     def _on_focus(self, *a):
+        if self.focus:
+            # 拿到焦点时, 把别的输入框的焦点(和橙色描边)清掉, 键盘只跟着这一个
+            _defocus_others(self)
         self._sync()
 
 
@@ -520,7 +581,8 @@ class BottomBar(BoxLayout):
         kw.setdefault("orientation", "horizontal")
         kw.setdefault("size_hint_y", None)
         kw.setdefault("height", dp(84))
-        kw.setdefault("padding", [dp(16), dp(10), dp(16), dp(8)])
+        # 上下各 16: 内容区正好 52 = 按钮高度, 按钮自然垂直居中
+        kw.setdefault("padding", [dp(16), dp(16), dp(16), dp(16)])
         kw.setdefault("spacing", dp(12))
         super().__init__(**kw)
         panel(self, fill=(0.043, 0.055, 0.071, 0.98), border=LINE, radius=0)
@@ -557,8 +619,21 @@ class CTA(Button):
         if icon:
             self.padding = [0, 0, dp(20), 0]
         self.bind(pos=self._sync, size=self._sync, state=self._sync)
+        self._sync()
+        # 布局当帧里 size/pos 的派发顺序不可靠, 下一帧再同步一次, 箭头才不会停在左边
+        Clock.schedule_once(lambda *a: self._sync(), 0)
+
+    # Kivy 会自动调用这两个, 比显式 bind 更保险
+    def on_size(self, *a):
+        Clock.schedule_once(lambda *x: self._sync(), -1)
+
+    def on_pos(self, *a):
+        Clock.schedule_once(lambda *x: self._sync(), -1)
 
     def _sync(self, *a):
+        # Kivy 在 __init__ 里就会触发 on_pos/on_size, 那时画布指令还没建好
+        if getattr(self, "_hl", None) is None:
+            return
         r = dp(16)
         self._hl.points = (self.x + r, self.y + self.height - dp(1.2),
                            self.right - r, self.y + self.height - dp(1.2))
@@ -570,7 +645,8 @@ class CTA(Button):
             self._gh.points = [cx - s * .1, cy + s * .68,
                                cx + s * .55, cy,
                                cx - s * .1, cy - s * .68]
-        self.text_size = (self.width, None)
+        if self.text_size[0] != self.width:
+            self.text_size = (self.width, None)
 
 
 class Ghost(Button):
@@ -701,7 +777,8 @@ class MainScreen(Screen):
                           height=dp(36), spacing=dp(7))
         self.pitch_btns = {}
         for p in PITCHES:
-            b = PitchChip(p)
+            # group: 单选; allow_no_selection=False: 再点已选中的不会变成"全不选"
+            b = PitchChip(p, group="pitch", allow_no_selection=False)
             b.state = "down" if p == "50.8" else "normal"
             b.bind(on_release=lambda *a: self.refresh_info())
             self.pitch_btns[p] = b
@@ -754,8 +831,8 @@ class MainScreen(Screen):
 
         stats.bind(pos=_stats_sync, size=_stats_sync)
 
-        self.in_width = Input("500", "有效宽度", 15, "right")
-        self.in_thick = Input("2.0", "板厚", 15, "right")
+        self.in_width = Input("445", "有效宽度", 15, "right")
+        self.in_thick = Input("1", "板厚", 15, "right")
         self.in_pin_d = Input("8", "穿杆直径", 15, "right")
 
         stats.add_widget(self._stat_cell("有效宽度", self.in_width))
@@ -1299,10 +1376,11 @@ class ResultScreen(Screen):
         top.add_widget(self.lbl_per)
         hero.add_widget(top)
 
-        numrow = BoxLayout(size_hint_y=None, height=dp(48), spacing=dp(3))
+        numrow = BoxLayout(size_hint_y=None, height=dp(58), spacing=dp(3))
         cur = fit(L("￥", 17, AMBER, bold=True), 1)
         numrow.add_widget(cur)
         self.lbl_total = fit(L("—", 40, TXT, bold=True), 4)
+        self.lbl_total.height = dp(54)
         numrow.add_widget(self.lbl_total)
         unit = fit(L("/ 米", 11.5, DIM), 8)
         numrow.add_widget(unit)
@@ -1685,6 +1763,7 @@ class SettingsScreen(Screen):
                            foreground_color=TXT, background_color=(0, 0, 0, 0),
                            cursor_color=AMBER, padding=[dp(9), dp(8)])
             self.formula_entries[path] = ti
+            _register_input(ti)
             map_lbl = L("", 10, OKC)
             map_lbl.size_hint_y = None
             map_lbl.height = dp(0)
