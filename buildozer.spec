@@ -10,7 +10,7 @@ source.include_patterns = fonts/*
 # 测试和 CI 配置不需要打进 APK
 source.exclude_dirs = tests, bin, .git, .github
 
-version = 1.3.0
+version = 1.3.1
 
 # 钉死 p4a 到 2024.01.21(默认 Python 3.11), 与 kivy 2.3.0 兼容
 # (2026 新版 p4a 默认 Python 3.14 会导致 kivy 编译失败)

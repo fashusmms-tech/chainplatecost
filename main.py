@@ -42,7 +42,7 @@ from chainplate_calc import (MATERIAL_NAMES, PITCHES, SAMPLE_ENV, VAR_NAMES,
                              eval_expr, format_result, formula_vars,
                              load_settings, save_settings)
 
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 
 MATERIAL_KEY = {name: key for key, name in MATERIAL_NAMES.items()}
 MATERIAL_LIST = list(MATERIAL_NAMES.values())
@@ -408,7 +408,7 @@ class Input(TextInput):
             self._lc = Color(*LINE2)
             self._ln = Line(rounded_rectangle=(self.x, self.y, self.width, self.height, dp(9)),
                             width=dp(0.9))
-        self.bind(pos=self._sync, size=self._sync, focus=self._on_focus)
+        self.bind(pos=self._sync, size=self._sync, focus=self._on_focus_changed)
         self._sync()
         _register_input(self)
 
@@ -422,9 +422,17 @@ class Input(TextInput):
         else:
             self._lc.rgba = LINE2
 
-    def _on_focus(self, *a):
+    def _on_focus_changed(self, *a):
+        """注意: 方法名不能叫 _on_focus!
+
+        Kivy 的 FocusBehavior.__init__ 里是 fbind('focus', self._on_focus),
+        而 self._on_focus 会解析到子类(本类)的同名方法。一旦在这里覆盖 _on_focus,
+        Kivy 自己的 _on_focus -> _bind_keyboard -> Window.request_keyboard ->
+        SDL_StartTextInput 整条链就再也不会执行 —— 表现为手机点输入框
+        "输入法完全不弹", 且 IME 服务端 mServedInputConnection 一直是 null。
+        """
         if self.focus:
-            # 拿到焦点时, 把别的输入框的焦点(和橙色描边)清掉, 键盘只跟着这一个
+            # 拿到焦点时把别的输入框的焦点(和橙色描边)清掉, 键盘只跟着这一个
             _defocus_others(self)
         self._sync()
 

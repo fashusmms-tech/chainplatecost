@@ -47,12 +47,15 @@ def probe(dt):
     print("  再点同一枚 -> down=%s pitch()=%s" % (_downs(_states(ms)), ms.pitch()))
     ok_single = len(_downs(_states(ms))) == 1
 
-    print("\n=== 输入框焦点互斥 ===")
+    print("\n=== 输入框焦点互斥 + 键盘请求 ===")
     a, b = ms.in_width, ms.in_thick
     a.focus = True
+    kb_a = a._keyboard is not None
     b.focus = True
     print("  先 A 后 B: A=%s B=%s" % (a.focus, b.focus))
+    print("  获得焦点时拿到了键盘对象:", kb_a, "/", b._keyboard is not None)
     ok_focus = not (a.focus and b.focus)
+    ok_kb = kb_a
 
     print("\n=== 默认值 ===")
     print("  有效宽度=%r 板厚=%r 穿杆直径=%r" % (a.text, b.text, ms.in_pin_d.text))
@@ -61,8 +64,10 @@ def probe(dt):
     print("  softinput_mode:", Window.softinput_mode)
     print("  已注册输入框:", len([r for r in main._INPUTS if r() is not None]))
 
-    print("\n结论: 单选=%s 焦点互斥=%s" % ("OK" if ok_single else "FAIL",
-                                          "OK" if ok_focus else "FAIL"))
+    print("\n结论: 单选=%s 焦点互斥=%s 键盘已请求=%s" % (
+        "OK" if ok_single else "FAIL",
+        "OK" if ok_focus else "FAIL",
+        "OK" if ok_kb else "FAIL(输入法不会弹)"))
     app.stop()
 
 
